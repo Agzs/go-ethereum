@@ -19,6 +19,7 @@ package vm
 import (
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -40,23 +41,25 @@ type PrecompiledContract interface {
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
 // contracts used in the Frontier and Homestead releases.
 var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
-	common.BytesToAddress([]byte{1}): &ecrecover{},
-	common.BytesToAddress([]byte{2}): &sha256hash{},
-	common.BytesToAddress([]byte{3}): &ripemd160hash{},
-	common.BytesToAddress([]byte{4}): &dataCopy{},
+	common.BytesToAddress([]byte{1}):  &ecrecover{},
+	common.BytesToAddress([]byte{2}):  &sha256hash{},
+	common.BytesToAddress([]byte{3}):  &ripemd160hash{},
+	common.BytesToAddress([]byte{4}):  &dataCopy{},
+	common.BytesToAddress([]byte{11}): &accumulate{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
 // contracts used in the Byzantium release.
 var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
-	common.BytesToAddress([]byte{1}): &ecrecover{},
-	common.BytesToAddress([]byte{2}): &sha256hash{},
-	common.BytesToAddress([]byte{3}): &ripemd160hash{},
-	common.BytesToAddress([]byte{4}): &dataCopy{},
-	common.BytesToAddress([]byte{5}): &bigModExp{},
-	common.BytesToAddress([]byte{6}): &bn256Add{},
-	common.BytesToAddress([]byte{7}): &bn256ScalarMul{},
-	common.BytesToAddress([]byte{8}): &bn256Pairing{},
+	common.BytesToAddress([]byte{1}):  &ecrecover{},
+	common.BytesToAddress([]byte{2}):  &sha256hash{},
+	common.BytesToAddress([]byte{3}):  &ripemd160hash{},
+	common.BytesToAddress([]byte{4}):  &dataCopy{},
+	common.BytesToAddress([]byte{5}):  &bigModExp{},
+	common.BytesToAddress([]byte{6}):  &bn256Add{},
+	common.BytesToAddress([]byte{7}):  &bn256ScalarMul{},
+	common.BytesToAddress([]byte{8}):  &bn256Pairing{},
+	common.BytesToAddress([]byte{11}): &accumulate{},
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -66,6 +69,41 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contr
 		return p.Run(input)
 	}
 	return nil, ErrOutOfGas
+}
+
+// ECRECOVER implemented as a native contract.
+type accumulate struct{}
+
+func (c *accumulate) RequiredGas(input []byte) uint64 {
+	return params.EcrecoverGas
+}
+
+func (c *accumulate) Run(input []byte) ([]byte, error) {
+	const ecRecoverInputLength = 128
+
+	fmt.Println("run accumulate test ....")
+
+	input = common.RightPadBytes(input, ecRecoverInputLength)
+	// "input" is (hash, v, r, s), each 32 bytes
+	// but for ecrecover we want (r, s, v)
+
+	r := new(big.Int).SetBytes(input[64:96])
+	s := new(big.Int).SetBytes(input[96:128])
+	v := input[63] - 27
+
+	// tighter sig s values input homestead only apply to tx sigs
+	if !allZero(input[32:63]) || !crypto.ValidateSignatureValues(v, r, s, false) {
+		return nil, nil
+	}
+	// v needs to be at the end for libsecp256k1
+	pubKey, err := crypto.Ecrecover(input[:32], append(input[64:128], v))
+	// make sure the public key is a valid one
+	if err != nil {
+		return nil, nil
+	}
+
+	// the first byte of pubkey is bitcoin heritage
+	return common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32), nil
 }
 
 // ECRECOVER implemented as a native contract.
