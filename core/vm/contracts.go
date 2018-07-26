@@ -17,15 +17,19 @@
 package vm
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/bn256"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"golang.org/x/crypto/ripemd160"
 )
@@ -46,6 +50,7 @@ var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{3}):  &ripemd160hash{},
 	common.BytesToAddress([]byte{4}):  &dataCopy{},
 	common.BytesToAddress([]byte{11}): &accumulate{},
+	common.BytesToAddress([]byte{12}): &verProof{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
@@ -60,6 +65,7 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{7}):  &bn256ScalarMul{},
 	common.BytesToAddress([]byte{8}):  &bn256Pairing{},
 	common.BytesToAddress([]byte{11}): &accumulate{},
+	common.BytesToAddress([]byte{12}): &verProof{},
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -71,40 +77,102 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contr
 	return nil, ErrOutOfGas
 }
 
-// ECRECOVER implemented as a native contract.
+// Strcat implemented as a native contract.
+type verProof struct{}
+
+func (c *verProof) RequiredGas(input []byte) uint64 {
+	return params.VerProofGas
+}
+
+func (c *verProof) Run(input []byte) ([]byte, error) {
+
+	length := len(input)
+	fmt.Printf("inputData size: ")
+	fmt.Println(length)
+
+	// verify proof
+	var buffer bytes.Buffer   // Buffer can be write and read with byte
+	messageID := []byte{0, 1} // 01 represents verify proof data
+
+	buffer.Write(messageID)
+	buffer.Write(input)
+	inputData := buffer.Bytes()
+
+	fmt.Printf("inputData: ")
+	fmt.Println(inputData)
+
+	result := localConnection(inputData)
+
+	bytes32Ans := make([]byte, 0, 32)
+
+	for i := 0; i < 31; i++ {
+		bytes32Ans = append(bytes32Ans, 0)
+	}
+
+	if result == 1 {
+		bytes32Ans = append(bytes32Ans, 1) // verify successfully
+	} else if result == 2 {
+		bytes32Ans = append(bytes32Ans, 2) // verify unsuccessfully
+	} else if result == 3 {
+		bytes32Ans = append(bytes32Ans, 3) // exist error
+	} else {
+		bytes32Ans = append(bytes32Ans, 0) // receive null data
+	}
+
+	fmt.Println(bytes32Ans)
+
+	return bytes32Ans, nil
+}
+
+// Accumulate implemented as a native contract.
 type accumulate struct{}
 
 func (c *accumulate) RequiredGas(input []byte) uint64 {
-	return params.EcrecoverGas
+	return params.AccumulateGas
 }
 
+// === 2 parameters ==========
 func (c *accumulate) Run(input []byte) ([]byte, error) {
-	const ecRecoverInputLength = 128
+	const accumulateInputLength = 64
+	input = common.RightPadBytes(input, accumulateInputLength)
 
 	fmt.Println("run accumulate test ....")
+	fmt.Println(input)
 
-	input = common.RightPadBytes(input, ecRecoverInputLength)
-	// "input" is (hash, v, r, s), each 32 bytes
-	// but for ecrecover we want (r, s, v)
+	bytes32Ans := make([]byte, 0, 32)
 
-	r := new(big.Int).SetBytes(input[64:96])
-	s := new(big.Int).SetBytes(input[96:128])
-	v := input[63] - 27
-
-	// tighter sig s values input homestead only apply to tx sigs
-	if !allZero(input[32:63]) || !crypto.ValidateSignatureValues(v, r, s, false) {
-		return nil, nil
-	}
-	// v needs to be at the end for libsecp256k1
-	pubKey, err := crypto.Ecrecover(input[:32], append(input[64:128], v))
-	// make sure the public key is a valid one
-	if err != nil {
-		return nil, nil
+	for i := 0; i < 32; i++ {
+		ans := input[i] + input[i+32]
+		bytes32Ans = append(bytes32Ans, ans)
 	}
 
-	// the first byte of pubkey is bitcoin heritage
-	return common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32), nil
+	fmt.Println(bytes32Ans)
+
+	return bytes32Ans, nil
 }
+
+// === 4 parameters ==========
+// func (c *accumulate) Run(input []byte) ([]byte, error) {
+// 	const accumulateInputLength = 128
+// 	input = common.RightPadBytes(input, accumulateInputLength)
+
+// 	fmt.Println("run accumulate test ....")
+// 	fmt.Println(input)
+
+// 	// ans := input[31] + input[63] + input[95] + input[127]
+// 	bytes32Ans := []byte{ans}
+
+// 	bytes32Ans := make([]byte, 0, 32)
+
+// 	for i := 0; i < 32; i++ {
+// 		ans := input[i] + input[i+32] + input[i+64] + input[i+96]
+// 		bytes32Ans = append(bytes32Ans, ans)
+// 	}
+
+// 	fmt.Println(bytes32Ans)
+
+// 	return bytes32Ans, nil
+// }
 
 // ECRECOVER implemented as a native contract.
 type ecrecover struct{}
@@ -395,4 +463,46 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 		return true32Byte, nil
 	}
 	return false32Byte, nil
+}
+
+/////////////////////////////////////
+//  connect libsnark to verify proof
+/////////////////////////////////////
+func checkConnection(conn net.Conn, err error) bool {
+	if err != nil {
+		log.Warn(err.Error())
+		fmt.Printf("error %v connecting, please check hdsnark\n", conn)
+		return false
+	}
+	fmt.Printf("connected with %v\n", conn)
+	return true
+}
+
+func localConnection(inputData []byte) uint32 {
+	conn, err := net.Dial("tcp", "127.0.0.1:8032")
+
+	if !checkConnection(conn, err) {
+		return 3
+	}
+
+	conn.Write(inputData) // send original data
+
+	receiveData := make([]byte, 2)
+
+	indexEnd, err := conn.Read(receiveData)
+
+	if err != nil {
+		log.Warn(err.Error())
+		return 3
+	}
+
+	result := uint32(binary.LittleEndian.Uint32(receiveData[0:indexEnd]))
+
+	fmt.Printf("receive result: ")
+	fmt.Println(result)
+
+	//////////////
+	// result = 1, 2, 3 represents true, false, error when verifying proof
+	defer conn.Close()
+	return result
 }

@@ -17,13 +17,18 @@
 package node
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -40,6 +45,99 @@ type PrivateAdminAPI struct {
 // of the node itself.
 func NewPrivateAdminAPI(node *Node) *PrivateAdminAPI {
 	return &PrivateAdminAPI{node: node}
+}
+
+//////////////////////////
+//  connect libsnark
+//////////////////////////
+func checkConnection(conn net.Conn, err error) bool {
+	if err != nil {
+		log.Warn(err.Error())
+		fmt.Printf("error %v connecting, please check hdsnark\n", conn)
+		return false
+	}
+	fmt.Printf("connected with %v\n", conn)
+	return true
+}
+
+func localConnection(inputData []byte) ([]byte, uint32) {
+	conn, err := net.Dial("tcp", "127.0.0.1:8032")
+	if !checkConnection(conn, err) {
+		return nil, 0
+	}
+
+	conn.Write(inputData) // send original data
+
+	receiveData := make([]byte, 1024)
+
+	indexEnd, err := conn.Read(receiveData)
+
+	if err != nil {
+		log.Warn(err.Error())
+		return nil, 0
+	}
+
+	proofLen := 288
+	proof := make([]byte, proofLen)
+	proof = receiveData[0:proofLen]
+	result := uint32(binary.LittleEndian.Uint32(receiveData[proofLen:indexEnd]))
+
+	fmt.Printf("receive proof: ")
+	fmt.Println(proof)
+	fmt.Printf("receive result: ")
+	fmt.Println(result)
+
+	defer conn.Close()
+	return proof, result
+}
+
+// GenProof returns a proof and result.
+func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, error) {
+	// Make sure the server is running, fail otherwise
+	server := api.node.Server()
+	if server == nil {
+		return false, ErrNodeStopped
+	}
+
+	hashData := sha256.Sum256(secretData)
+	hashCoeff := sha256.Sum256(pubParas)
+
+	// Try to add the url as a static peer and return
+	fmt.Println("sending these data to libsnark to gennerate proof!!!")
+	fmt.Printf("hashData: ")
+	fmt.Println(hashData)
+	fmt.Printf("secretData: ")
+	fmt.Println(secretData)
+	fmt.Printf("hashCoeff: ")
+	fmt.Println(hashCoeff)
+	fmt.Printf("pubParas: ")
+	fmt.Println(pubParas)
+
+	var buffer bytes.Buffer   // Buffer can be write and read with byte
+	messageID := []byte{0, 0} // 00 represents original data
+
+	buffer.Write(messageID)
+	buffer.Write(hashData[:])
+	buffer.Write(secretData)
+	buffer.Write(hashCoeff[:])
+	buffer.Write(pubParas)
+	inputData := buffer.Bytes()
+
+	fmt.Printf("inputData: ")
+	fmt.Println(inputData)
+
+	proof := make([]byte, 0, 288)
+	proof, result := localConnection(inputData)
+
+	fmt.Printf("proof: ")
+	fmt.Println(proof)
+	fmt.Printf("result: ")
+	fmt.Println(result)
+
+	if len(proof) == 0 {
+		return false, nil
+	}
+	return true, nil
 }
 
 // AddPeer requests connecting to a remote node, and also maintaining the new
