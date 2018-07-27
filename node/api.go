@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -50,7 +50,7 @@ func NewPrivateAdminAPI(node *Node) *PrivateAdminAPI {
 //////////////////////////
 //  connect libsnark
 //////////////////////////
-func checkConnection(conn net.Conn, err error) bool {
+func checkGenConnection(conn net.Conn, err error) bool {
 	if err != nil {
 		log.Warn(err.Error())
 		fmt.Printf("error %v connecting, please check hdsnark\n", conn)
@@ -60,15 +60,15 @@ func checkConnection(conn net.Conn, err error) bool {
 	return true
 }
 
-func localConnection(inputData []byte) ([]byte, uint32) {
+func localGenConnection(inputData []byte) ([]byte, uint32) {
 	conn, err := net.Dial("tcp", "127.0.0.1:8032")
-	if !checkConnection(conn, err) {
+	if !checkGenConnection(conn, err) {
 		return nil, 0
 	}
 
 	conn.Write(inputData) // send original data
 
-	receiveData := make([]byte, 1024)
+	receiveData := make([]byte, 2048)
 
 	indexEnd, err := conn.Read(receiveData)
 
@@ -77,15 +77,23 @@ func localConnection(inputData []byte) ([]byte, uint32) {
 		return nil, 0
 	}
 
-	proofLen := 288
-	proof := make([]byte, proofLen)
-	proof = receiveData[0:proofLen]
-	result := uint32(binary.LittleEndian.Uint32(receiveData[proofLen:indexEnd]))
+	// var result uint32
+	// resIndex := (int)(unsafe.Sizeof(result))
+	// result = uint32(binary.LittleEndian.Uint32(receiveData[0:resIndex]))
 
-	fmt.Printf("receive proof: ")
-	fmt.Println(proof)
-	fmt.Printf("receive result: ")
-	fmt.Println(result)
+	result := (uint32)(receiveData[0] - 48)
+	for i := 1; i < 4; i++ {
+		result = 10*result + (uint32)(receiveData[i]-48)
+	}
+
+	proofLen := 1152
+	proof := make([]byte, proofLen)
+	proof = receiveData[4:indexEnd]
+
+	// fmt.Printf("receive proof: ")
+	// fmt.Println(proof)
+	// fmt.Printf("receive result: ")
+	// fmt.Println(result)
 
 	defer conn.Close()
 	return proof, result
@@ -104,14 +112,14 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 
 	// Try to add the url as a static peer and return
 	fmt.Println("sending these data to libsnark to gennerate proof!!!")
-	fmt.Printf("hashData: ")
-	fmt.Println(hashData)
-	fmt.Printf("secretData: ")
-	fmt.Println(secretData)
-	fmt.Printf("hashCoeff: ")
-	fmt.Println(hashCoeff)
-	fmt.Printf("pubParas: ")
-	fmt.Println(pubParas)
+	// fmt.Printf("hashData: ")
+	// fmt.Println(hashData)
+	// fmt.Printf("secretData: ")
+	// fmt.Println(secretData)
+	// fmt.Printf("hashCoeff: ")
+	// fmt.Println(hashCoeff)
+	// fmt.Printf("pubParas: ")
+	// fmt.Println(pubParas)
 
 	var buffer bytes.Buffer   // Buffer can be write and read with byte
 	messageID := []byte{0, 0} // 00 represents original data
@@ -126,18 +134,43 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	fmt.Printf("inputData: ")
 	fmt.Println(inputData)
 
-	proof := make([]byte, 0, 288)
-	proof, result := localConnection(inputData)
-
-	fmt.Printf("proof: ")
-	fmt.Println(proof)
-	fmt.Printf("result: ")
-	fmt.Println(result)
+	proof := make([]byte, 0, 1152)
+	proof, result := localGenConnection(inputData)
 
 	if len(proof) == 0 {
 		return false, nil
 	}
+
+	fmt.Println("receive data: \n\n")
+	fmt.Printf("proof = ")
+	PrintByteArray(proof)
+	// fmt.Println(proof)
+	fmt.Printf("premium = %d\n", result)
+	// resArray := make([]byte, 0, 2)
+	// resArray = append(resArray, (byte)(result/256), (byte)(result%256))
+	// fmt.Printf("premium = ")
+	// PrintByteArray(resArray)
+	// fmt.Println(result)
+
+	fmt.Printf("hashData = \"0x%s\"\n", hex.EncodeToString(hashData[:]))
+	// fmt.Println(hashData)
+	// PrintByteArray(hashData[:])
+
+	fmt.Printf("hashCoeff = \"0x%s\"\n\n", hex.EncodeToString(hashCoeff[:]))
+	// fmt.Printf("hashCoeff = ")
+	// fmt.Println(hashCoeff)
+	// PrintByteArray(hashCoeff[:])
+
 	return true, nil
+}
+
+func PrintByteArray(data []byte) {
+	fmt.Printf("[%d", data[0])
+	lenData := len(data)
+	for i := 1; i < lenData-1; i++ {
+		fmt.Printf(", %d", data[i])
+	}
+	fmt.Printf(", %d]\n", data[lenData-1])
 }
 
 // AddPeer requests connecting to a remote node, and also maintaining the new

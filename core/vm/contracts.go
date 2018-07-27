@@ -19,7 +19,6 @@ package vm
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -86,6 +85,8 @@ func (c *verProof) RequiredGas(input []byte) uint64 {
 
 func (c *verProof) Run(input []byte) ([]byte, error) {
 
+	fmt.Println("run verProof test ....")
+
 	length := len(input)
 	fmt.Printf("inputData size: ")
 	fmt.Println(length)
@@ -101,7 +102,7 @@ func (c *verProof) Run(input []byte) ([]byte, error) {
 	fmt.Printf("inputData: ")
 	fmt.Println(inputData)
 
-	result := localConnection(inputData)
+	result := localVerifyConnection(inputData)
 
 	bytes32Ans := make([]byte, 0, 32)
 
@@ -468,7 +469,7 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 /////////////////////////////////////
 //  connect libsnark to verify proof
 /////////////////////////////////////
-func checkConnection(conn net.Conn, err error) bool {
+func checkVerifyConnection(conn net.Conn, err error) bool {
 	if err != nil {
 		log.Warn(err.Error())
 		fmt.Printf("error %v connecting, please check hdsnark\n", conn)
@@ -478,10 +479,10 @@ func checkConnection(conn net.Conn, err error) bool {
 	return true
 }
 
-func localConnection(inputData []byte) uint32 {
+func localVerifyConnection(inputData []byte) uint32 {
 	conn, err := net.Dial("tcp", "127.0.0.1:8032")
 
-	if !checkConnection(conn, err) {
+	if !checkVerifyConnection(conn, err) {
 		return 3
 	}
 
@@ -490,13 +491,21 @@ func localConnection(inputData []byte) uint32 {
 	receiveData := make([]byte, 2)
 
 	indexEnd, err := conn.Read(receiveData)
+	fmt.Printf("receive data: ")
+	fmt.Println(receiveData)
+	fmt.Printf("receive data index end: ")
+	fmt.Println(indexEnd)
 
 	if err != nil {
 		log.Warn(err.Error())
 		return 3
 	}
 
-	result := uint32(binary.LittleEndian.Uint32(receiveData[0:indexEnd]))
+	// var result uint32
+	// resIndex := (int)(unsafe.Sizeof(result))
+	// result = uint32(binary.LittleEndian.Uint32(receiveData[0:resIndex]))
+
+	result := (uint32)(receiveData[0] - 48)
 
 	fmt.Printf("receive result: ")
 	fmt.Println(result)
