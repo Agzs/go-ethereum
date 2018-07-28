@@ -108,7 +108,7 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	}
 
 	hashData := sha256.Sum256(secretData)
-	hashCoeff := sha256.Sum256(pubParas)
+	// hashCoeff := sha256.Sum256(pubParas)
 
 	// Try to add the url as a static peer and return
 	fmt.Println("sending these data to libsnark to gennerate proof!!!")
@@ -127,8 +127,17 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	buffer.Write(messageID)
 	buffer.Write(hashData[:])
 	buffer.Write(secretData)
-	buffer.Write(hashCoeff[:])
-	buffer.Write(pubParas)
+	// buffer.Write(hashCoeff[:])
+	// insert pubParas len
+	newPubParas := make([]byte, 0, len(pubParas)+1)
+	newPubParas = append(newPubParas, byte(len(pubParas)))
+	for i := 0; i < len(pubParas); i++ {
+		newPubParas = append(newPubParas, pubParas[i])
+	}
+	fmt.Println(newPubParas)
+	//copy(newPubParas[1:], pubParas)
+	buffer.Write(newPubParas)
+	// buffer.Write(pubParas)
 	inputData := buffer.Bytes()
 
 	fmt.Printf("inputData: ")
@@ -142,9 +151,11 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	}
 
 	fmt.Println("receive data: \n\n")
-	fmt.Printf("proof = ")
-	PrintByteArray(proof)
+	fmt.Printf("proof = \"0x%s\"\n", hex.EncodeToString(proof))
+	//fmt.Printf("proof = ")
+	//PrintByteArray(proof)
 	// fmt.Println(proof)
+
 	fmt.Printf("premium = %d\n", result)
 	// resArray := make([]byte, 0, 2)
 	// resArray = append(resArray, (byte)(result/256), (byte)(result%256))
@@ -156,7 +167,7 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	// fmt.Println(hashData)
 	// PrintByteArray(hashData[:])
 
-	fmt.Printf("hashCoeff = \"0x%s\"\n\n", hex.EncodeToString(hashCoeff[:]))
+	fmt.Printf("coeff = \"0x%s\"\n\n", hex.EncodeToString(pubParas))
 	// fmt.Printf("hashCoeff = ")
 	// fmt.Println(hashCoeff)
 	// PrintByteArray(hashCoeff[:])
@@ -164,14 +175,14 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	return true, nil
 }
 
-func PrintByteArray(data []byte) {
-	fmt.Printf("[%d", data[0])
-	lenData := len(data)
-	for i := 1; i < lenData-1; i++ {
-		fmt.Printf(", %d", data[i])
-	}
-	fmt.Printf(", %d]\n", data[lenData-1])
-}
+// func PrintByteArray(data []byte) {
+// 	fmt.Printf("[%d", data[0])
+// 	lenData := len(data)
+// 	for i := 1; i < lenData-1; i++ {
+// 		fmt.Printf(", %d", data[i])
+// 	}
+// 	fmt.Printf(", %d]\n", data[lenData-1])
+// }
 
 // AddPeer requests connecting to a remote node, and also maintaining the new
 // connection at all times, even reconnecting if it is lost.
