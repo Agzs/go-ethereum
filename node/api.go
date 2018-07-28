@@ -167,7 +167,7 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	// fmt.Println(hashData)
 	// PrintByteArray(hashData[:])
 
-	fmt.Printf("coeff = \"0x%s\"\n\n", hex.EncodeToString(pubParas))
+	fmt.Printf("coeff = \"0x%s\"\n\n", hex.EncodeToString(newPubParas))
 	// fmt.Printf("hashCoeff = ")
 	// fmt.Println(hashCoeff)
 	// PrintByteArray(hashCoeff[:])
