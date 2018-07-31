@@ -19,7 +19,6 @@ package node
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -100,14 +99,14 @@ func localGenConnection(inputData []byte) ([]byte, uint32) {
 }
 
 // GenProof returns a proof and result.
-func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, error) {
+func (api *PrivateAdminAPI) GenProof(secretData []byte, hashData []byte, pubParas []byte) (bool, error) {
 	// Make sure the server is running, fail otherwise
 	server := api.node.Server()
 	if server == nil {
 		return false, ErrNodeStopped
 	}
 
-	hashData := sha256.Sum256(secretData)
+	// hashData := sha256.Sum256(secretData)
 	// hashCoeff := sha256.Sum256(pubParas)
 
 	// Try to add the url as a static peer and return
@@ -143,6 +142,29 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	fmt.Printf("inputData: ")
 	fmt.Println(inputData)
 
+	// //============================================
+	// // former return for test.
+	// fmt.Printf("coeff len is %d\n", len(pubParas))
+	// fmt.Printf("secretData len is %d\n", len(secretData))
+	
+	// resultByte := 0
+	// for i := 0; i < len(pubParas); i++{
+	// 	resultByte += int(secretData[i]) * int(pubParas[i])
+	// 	// fmt.Println(resultByte)
+	// }
+	// fmt.Printf("Result = %d\n", resultByte)
+
+	// fmt.Printf("h_data_bv = ")
+	// PrintByteArray(hashData[:])
+	// fmt.Printf("tuple_data_bv = ")
+	// PrintByteArray(secretData)
+	// fmt.Printf("data_coeff_bv = ")
+	// PrintByteArray(pubParas)
+	// fmt.Printf("premium_bv = int_list_to_bits({%d, %d}, 8);\n", resultByte/256, resultByte%256)
+
+	// return true, nil
+	// ////////////////////////////////
+
 	proof := make([]byte, 0, 1152)
 	proof, result := localGenConnection(inputData)
 
@@ -163,7 +185,7 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	// PrintByteArray(resArray)
 	// fmt.Println(result)
 
-	fmt.Printf("hashData = \"0x%s\"\n", hex.EncodeToString(hashData[:]))
+	fmt.Printf("hashData = \"0x%s\"\n", hex.EncodeToString(hashData))
 	// fmt.Println(hashData)
 	// PrintByteArray(hashData[:])
 
@@ -175,14 +197,14 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	return true, nil
 }
 
-// func PrintByteArray(data []byte) {
-// 	fmt.Printf("[%d", data[0])
-// 	lenData := len(data)
-// 	for i := 1; i < lenData-1; i++ {
-// 		fmt.Printf(", %d", data[i])
-// 	}
-// 	fmt.Printf(", %d]\n", data[lenData-1])
-// }
+func PrintByteArray(data []byte) {
+	fmt.Printf("int_list_to_bits({%d", data[0])
+	lenData := len(data)
+	for i := 1; i < lenData-1; i++ {
+		fmt.Printf(", %d", data[i])
+	}
+	fmt.Printf(", %d}, 8);\n", data[lenData-1])
+}
 
 // AddPeer requests connecting to a remote node, and also maintaining the new
 // connection at all times, even reconnecting if it is lost.
