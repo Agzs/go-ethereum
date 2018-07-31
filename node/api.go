@@ -124,6 +124,8 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	var buffer bytes.Buffer   // Buffer can be write and read with byte
 	messageID := []byte{0, 0} // 00 represents original data
 
+	// start time --ZHOU
+	t1 := time.Now()
 	buffer.Write(messageID)
 	buffer.Write(hashData[:])
 	buffer.Write(secretData)
@@ -149,6 +151,9 @@ func (api *PrivateAdminAPI) GenProof(secretData []byte, pubParas []byte) (bool, 
 	if len(proof) == 0 {
 		return false, nil
 	}
+	// end time --ZHOU
+	proof_time := time.Since(t1)
+	fmt.Println("App proof_time: ", proof_time)
 
 	fmt.Println("receive data: \n\n")
 	fmt.Printf("proof = \"0x%s\"\n", hex.EncodeToString(proof))

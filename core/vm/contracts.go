@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -86,7 +87,8 @@ func (c *verProof) RequiredGas(input []byte) uint64 {
 func (c *verProof) Run(input []byte) ([]byte, error) {
 
 	fmt.Println("run verProof test ....")
-
+	// start time --ZHOU
+	t2 := time.Now()
 	length := len(input)
 	fmt.Printf("inputData size: ")
 	fmt.Println(length)
@@ -120,6 +122,9 @@ func (c *verProof) Run(input []byte) ([]byte, error) {
 		bytes32Ans = append(bytes32Ans, 0) // receive null data
 	}
 
+	// end time --ZHOU
+	verify_time := time.Since(t2)
+	fmt.Println("App verify_time: ", verify_time)
 	fmt.Println(bytes32Ans)
 
 	return bytes32Ans, nil
