@@ -45,6 +45,12 @@
 			"revisionTime": "2017-02-15T19:58:14Z"
 		},
 		{
+			"checksumSHA1": "a8m3ANZ8G/6EHH2QoFM3KleI6W8=",
+			"path": "github.com/Nik-U/pbc",
+			"revision": "3e516ca0c5d64646fd1c3aeb1ecd41dacba1f0c6",
+			"revisionTime": "2018-12-05T04:18:46Z"
+		},
+		{
 			"checksumSHA1": "QC55lHNOv1+UAL2xtIHw17MJ8J8=",
 			"path": "github.com/StackExchange/wmi",
 			"revision": "5d049714c4a64225c3c79a7cf7d02f7fb5b96338",
